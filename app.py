@@ -983,9 +983,11 @@ def main():
             # Audio input
             st.markdown("""
             <div style="background: #fff3cd; padding: 1rem; border-radius: 8px; border-left: 4px solid #ffc107; margin-bottom: 1rem;">
-                <p style="color: #856404; margin: 0; font-size: 0.9rem;">
-                <strong>Accepted format:</strong> WAV files only<br>
-                <strong>Have MP3?</strong> Convert it free at <a href="https://cloudconvert.com/mp3-to-wav" target="_blank" style="color: #1DB954;">cloudconvert.com</a> (takes 10 seconds)
+                <p style="color: #856404; margin: 0 0 0.5rem 0; font-size: 0.9rem;">
+                <strong>📱 On mobile?</strong> Use your phone's voice recorder app, then upload the WAV file here.
+                </p>
+                <p style="color: #856404; margin: 0; font-size: 0.85rem;">
+                <strong>Have MP3?</strong> Convert free at <a href="https://cloudconvert.com/mp3-to-wav" target="_blank" style="color: #1DB954; text-decoration: underline;">cloudconvert.com</a> (10 seconds)
                 </p>
             </div>
             """, unsafe_allow_html=True)
@@ -993,7 +995,7 @@ def main():
             audio_file = st.file_uploader(
                 "Upload your 5-second voice note (WAV format)",
                 type=['wav'],
-                help="Most voice recorder apps can save as WAV format"
+                help="Record with your phone's voice memo app, then upload here"
             )
             
             if audio_file:
