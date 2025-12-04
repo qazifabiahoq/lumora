@@ -1010,10 +1010,10 @@ def main():
                                 if np.max(np.abs(audio_data)) > 0:
                                     audio_data = audio_data / np.max(np.abs(audio_data))
                                 
-                            except:
-                                st.error("Please upload a WAV file for best results. MP3/M4A require additional conversion.")
-                                st.info("Tip: You can convert your audio to WAV format using online tools or your device's voice recorder app.")
-                                continue
+                            except Exception as e:
+                                st.error("Please upload a WAV file for best results.")
+                                st.info("Tip: You can convert your audio to WAV format using online tools or your phone's voice recorder app.")
+                                st.stop()
                             
                             # Resample if needed (simple decimation)
                             target_sr = 22050
