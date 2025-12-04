@@ -1,6 +1,6 @@
 """
-Lumora - AI Voice to Music Matching
-Transform your voice into the perfect playlist in 5 seconds
+Lumora
+Your Voice. Your Vibe. Your Music.
 """
 
 import streamlit as st
@@ -17,7 +17,7 @@ import pandas as pd
 
 # Page configuration
 st.set_page_config(
-    page_title="Lumora - AI Voice to Music",
+    page_title="Lumora",
     page_icon="🎵",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -826,7 +826,7 @@ def render_header():
     st.markdown("""
     <div class="lumora-header">
         <h1 class="lumora-title">Lumora</h1>
-        <p class="lumora-subtitle">AI-Powered Voice to Music Matching | Transform your voice into the perfect playlist in 5 seconds</p>
+        <p class="lumora-subtitle">Your Voice. Your Vibe. Your Music.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -954,26 +954,30 @@ def main():
         with col1:
             st.markdown("""
             <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 12px; border: 1px solid #e5e7eb; margin-bottom: 1rem;">
-                <h4 style="margin-top: 0; color: #1DB954;">What should I say?</h4>
-                <p style="color: #6b7280; margin-bottom: 0;">
-                Just talk naturally for 5 seconds. Say how you're feeling, describe your day, 
-                or share what's on your mind. The AI analyzes your tone, pace, and energy—not the words.
+                <h4 style="margin-top: 0; color: #1DB954;">Record Your Voice Note</h4>
+                <p style="color: #6b7280; margin-bottom: 0.5rem;">
+                <strong>Just speak naturally for 5 seconds.</strong> Say anything - how you're feeling right now, 
+                what's on your mind, or describe your day. Our AI analyzes your tone, energy, and pace to understand 
+                your emotional state, not the words you say.
+                </p>
+                <p style="color: #9ca3af; margin: 0.75rem 0 0 0; font-size: 0.85rem; font-style: italic;">
+                Example: "I'm feeling pretty energized today, just finished a great workout and ready to tackle some projects..."
                 </p>
             </div>
             """, unsafe_allow_html=True)
             
             # Audio input
             audio_file = st.file_uploader(
-                "Record or upload your voice (5 seconds)",
+                "Upload your 5-second voice note",
                 type=['wav', 'mp3', 'ogg', 'm4a'],
-                help="Click to record or upload a short audio clip"
+                help="Record or select an audio file (5-10 seconds works best)"
             )
             
             if audio_file:
                 st.audio(audio_file)
                 
                 if st.button("Create My Lumora", use_container_width=True):
-                    with st.spinner("✨ Analyzing your emotional signature..."):
+                    with st.spinner("Analyzing your voice and matching your music..."):
                         try:
                             # Load audio
                             audio_bytes = audio_file.read()
@@ -1014,7 +1018,7 @@ def main():
                                     st.session_state.emotion_history.append(emotion_data)
                                     
                                     # Display results
-                                    st.success("Your Lumora is ready!")
+                                    st.success("Perfect! Your personalized playlist is ready based on your voice.")
                                     
                                     st.markdown(f"""
                                     <div style="text-align: center; margin: 2rem 0;">
@@ -1282,10 +1286,10 @@ def main():
     st.markdown("""
     <div style="text-align: center; color: #6b7280; padding: 2rem 0;">
         <p style="margin: 0;">
-            <strong style="color: #1DB954;">Lumora</strong> | AI-Powered Voice to Music Matching
+            <strong style="color: #1DB954;">Lumora</strong>
         </p>
         <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem;">
-            Advanced voice emotion AI | Built for music discovery
+            Your Voice. Your Vibe. Your Music.
         </p>
     </div>
     """, unsafe_allow_html=True)
