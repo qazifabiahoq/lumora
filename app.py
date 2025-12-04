@@ -14,6 +14,7 @@ from collections import Counter
 import pandas as pd
 from scipy.io import wavfile
 from scipy import signal
+from pydub import AudioSegment
 
 # Page configuration
 st.set_page_config(
@@ -982,20 +983,19 @@ def main():
             
             # Audio input
             st.markdown("""
-            <div style="background: #fff3cd; padding: 1rem; border-radius: 8px; border-left: 4px solid #ffc107; margin-bottom: 1rem;">
-                <p style="color: #856404; margin: 0 0 0.5rem 0; font-size: 0.9rem;">
-                <strong>📱 On mobile?</strong> Use your phone's voice recorder app, then upload the WAV file here.
-                </p>
-                <p style="color: #856404; margin: 0; font-size: 0.85rem;">
-                <strong>Have MP3?</strong> Convert free at <a href="https://cloudconvert.com/mp3-to-wav" target="_blank" style="color: #1DB954; text-decoration: underline;">cloudconvert.com</a> (10 seconds)
+            <div style="background: #e7f5ff; padding: 1rem; border-radius: 8px; border-left: 4px solid #1DB954; margin-bottom: 1rem;">
+                <p style="color: #1e3a5f; margin: 0; font-size: 0.9rem;">
+                <strong>📱 Supported:</strong> All audio formats + video audio extraction<br>
+                <strong>Audio:</strong> WAV, MP3, M4A, OGG, FLAC, AAC, WMA, AIFF<br>
+                <strong>Video audio:</strong> MP4, MOV, AVI, MKV, WEBM (audio will be extracted)
                 </p>
             </div>
             """, unsafe_allow_html=True)
             
             audio_file = st.file_uploader(
-                "Upload your 5-second voice note (WAV format)",
-                type=['wav'],
-                help="Record with your phone's voice memo app, then upload here"
+                "Upload your 5-second voice note or video",
+                type=['wav', 'mp3', 'm4a', 'ogg', 'flac', 'aac', 'wma', 'aiff', 'mp4', 'mov', 'avi', 'mkv', 'webm'],
+                help="Upload any audio file or video (we'll extract the audio)"
             )
             
             if audio_file:
@@ -1004,21 +1004,67 @@ def main():
                 if st.button("Create My Lumora", use_container_width=True):
                     with st.spinner("Analyzing your voice and matching your music..."):
                         try:
-                            # Load WAV file
+                            # Load audio file
                             audio_bytes = audio_file.read()
-                            audio_file.seek(0)
-                            sr, audio_data = wavfile.read(io.BytesIO(audio_bytes))
+                            file_extension = audio_file.name.split('.')[-1].lower()
                             
-                            # Convert to mono if stereo
-                            if len(audio_data.shape) > 1:
-                                audio_data = np.mean(audio_data, axis=1)
+                            # List of supported formats
+                            audio_formats = ['mp3', 'm4a', 'ogg', 'flac', 'aac', 'wma', 'aiff']
+                            video_formats = ['mp4', 'mov', 'avi', 'mkv', 'webm']
+                            
+                            # Process based on file type
+                            if file_extension in audio_formats or file_extension in video_formats:
+                                try:
+                                    # Determine format for pydub
+                                    if file_extension == 'm4a':
+                                        format_name = 'mp4'
+                                    elif file_extension in video_formats:
+                                        format_name = file_extension
+                                        st.info(f"Extracting audio from {file_extension.upper()} video...")
+                                    else:
+                                        format_name = file_extension
+                                    
+                                    # Load and convert to WAV
+                                    audio_segment = AudioSegment.from_file(
+                                        io.BytesIO(audio_bytes), 
+                                        format=format_name
+                                    )
+                                    
+                                    # Convert to mono and set sample rate
+                                    audio_segment = audio_segment.set_channels(1)
+                                    audio_segment = audio_segment.set_frame_rate(22050)
+                                    
+                                    # Export as WAV
+                                    wav_io = io.BytesIO()
+                                    audio_segment.export(wav_io, format='wav')
+                                    wav_io.seek(0)
+                                    
+                                    # Read WAV
+                                    sr, audio_data = wavfile.read(wav_io)
+                                    
+                                    if file_extension in video_formats:
+                                        st.success(f"Audio extracted from video successfully!")
+                                    
+                                except Exception as e:
+                                    st.error(f"Could not process {file_extension.upper()} file.")
+                                    st.info(f"Error details: {str(e)}")
+                                    st.info("Try converting your file to WAV or MP3 format first.")
+                                    st.stop()
+                            else:
+                                # Load WAV directly
+                                audio_file.seek(0)
+                                sr, audio_data = wavfile.read(io.BytesIO(audio_bytes))
+                                
+                                # Convert to mono if stereo
+                                if len(audio_data.shape) > 1:
+                                    audio_data = np.mean(audio_data, axis=1)
                             
                             # Normalize
                             audio_data = audio_data.astype(float)
                             if np.max(np.abs(audio_data)) > 0:
                                 audio_data = audio_data / np.max(np.abs(audio_data))
                             
-                            # Resample if needed (simple decimation)
+                            # Resample if needed
                             target_sr = 22050
                             if sr > target_sr:
                                 factor = sr // target_sr
