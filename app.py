@@ -10,10 +10,10 @@ import plotly.express as px
 from datetime import datetime
 import json
 import io
-import librosa
-import soundfile as sf
 from collections import Counter
 import pandas as pd
+from scipy.io import wavfile
+from scipy import signal
 
 # Page configuration
 st.set_page_config(
@@ -466,65 +466,79 @@ if 'emotion_history' not in st.session_state:
 
 def extract_audio_features(audio_data, sr=22050):
     """
-    Extract acoustic features from audio that correlate with emotions
-    This is the CORE AI logic - similar to your sentiment analysis quality
+    Extract acoustic features from audio using scipy (lightweight alternative to librosa)
     """
     try:
-        # Trim silence
-        audio_data, _ = librosa.effects.trim(audio_data, top_db=20)
+        # Basic audio statistics
+        audio_data = audio_data.astype(float)
         
-        # Energy (intensity of emotion)
-        rms = librosa.feature.rms(y=audio_data)[0]
-        energy = float(np.mean(rms))
-        energy_variance = float(np.std(rms))
+        # Energy (RMS)
+        energy = np.sqrt(np.mean(audio_data**2))
+        energy_variance = np.std(audio_data**2)
         
-        # Tempo (pace of speech = arousal level)
-        tempo, _ = librosa.beat.beat_track(y=audio_data, sr=sr)
-        tempo = float(tempo)
+        # Zero Crossing Rate
+        zero_crossings = np.sum(np.abs(np.diff(np.sign(audio_data)))) / (2 * len(audio_data))
         
-        # Zero Crossing Rate (emotional activation)
-        zcr = librosa.feature.zero_crossing_rate(audio_data)[0]
-        zcr_mean = float(np.mean(zcr))
+        # Spectral features using FFT
+        fft = np.fft.rfft(audio_data)
+        magnitude = np.abs(fft)
+        frequency = np.fft.rfftfreq(len(audio_data), 1/sr)
         
-        # Spectral Centroid (brightness = positivity)
-        spectral_centroids = librosa.feature.spectral_centroid(y=audio_data, sr=sr)[0]
-        spectral_centroid = float(np.mean(spectral_centroids))
+        # Spectral Centroid (brightness)
+        spectral_centroid = np.sum(frequency * magnitude) / np.sum(magnitude) if np.sum(magnitude) > 0 else 0
         
-        # Spectral Rolloff (energy distribution)
-        spectral_rolloff = librosa.feature.spectral_rolloff(y=audio_data, sr=sr)[0]
-        rolloff = float(np.mean(spectral_rolloff))
+        # Spectral Rolloff
+        cumsum = np.cumsum(magnitude)
+        rolloff_idx = np.where(cumsum >= 0.85 * cumsum[-1])[0]
+        spectral_rolloff = frequency[rolloff_idx[0]] if len(rolloff_idx) > 0 else 0
         
-        # MFCCs (timbral texture = emotional color)
-        mfccs = librosa.feature.mfcc(y=audio_data, sr=sr, n_mfcc=13)
-        mfcc_mean = [float(np.mean(mfcc)) for mfcc in mfccs]
+        # Estimate tempo from autocorrelation
+        autocorr = np.correlate(audio_data, audio_data, mode='full')
+        autocorr = autocorr[len(autocorr)//2:]
         
-        # Pitch tracking (emotional variation)
-        pitches, magnitudes = librosa.piptrack(y=audio_data, sr=sr)
+        # Find peaks in autocorrelation (simple tempo estimation)
+        peaks = signal.find_peaks(autocorr, distance=sr//10)[0]
+        if len(peaks) > 1:
+            tempo = 60 * sr / np.median(np.diff(peaks[:5]))
+        else:
+            tempo = 120  # default tempo
+        
+        # Pitch estimation (simplified)
         pitch_values = []
-        for t in range(pitches.shape[1]):
-            index = magnitudes[:, t].argmax()
-            pitch = pitches[index, t]
-            if pitch > 0:
-                pitch_values.append(pitch)
+        for i in range(0, len(audio_data) - sr//10, sr//20):
+            segment = audio_data[i:i + sr//10]
+            autocorr_seg = np.correlate(segment, segment, mode='full')
+            autocorr_seg = autocorr_seg[len(autocorr_seg)//2:]
+            peaks_seg = signal.find_peaks(autocorr_seg)[0]
+            if len(peaks_seg) > 0:
+                pitch_values.append(sr / peaks_seg[0] if peaks_seg[0] > 0 else 0)
         
-        pitch_mean = float(np.mean(pitch_values)) if pitch_values else 0
-        pitch_std = float(np.std(pitch_values)) if pitch_values else 0
+        pitch_mean = np.mean(pitch_values) if pitch_values else 200
+        pitch_std = np.std(pitch_values) if pitch_values else 0
         
-        # Chroma features (harmonic content = emotional depth)
-        chroma = librosa.feature.chroma_stft(y=audio_data, sr=sr)
-        chroma_mean = float(np.mean(chroma))
+        # Simplified MFCC-like features (using log of spectral bands)
+        n_bands = 13
+        band_edges = np.logspace(np.log10(20), np.log10(sr/2), n_bands + 1)
+        mfcc_mean = []
+        for i in range(n_bands):
+            band_mask = (frequency >= band_edges[i]) & (frequency < band_edges[i+1])
+            band_power = np.sum(magnitude[band_mask]**2)
+            mfcc_mean.append(np.log(band_power + 1e-10))
+        
+        # Chroma-like feature (harmonic content)
+        chroma_mean = np.mean(magnitude[:int(sr/2)])
         
         return {
-            'energy': energy,
-            'energy_variance': energy_variance,
-            'tempo': tempo,
-            'zcr': zcr_mean,
-            'spectral_centroid': spectral_centroid,
-            'spectral_rolloff': rolloff,
+            'energy': float(energy),
+            'energy_variance': float(energy_variance),
+            'tempo': float(np.clip(tempo, 60, 200)),
+            'zcr': float(zero_crossings),
+            'spectral_centroid': float(spectral_centroid),
+            'spectral_rolloff': float(spectral_rolloff),
             'mfcc_mean': mfcc_mean,
-            'pitch_mean': pitch_mean,
-            'pitch_std': pitch_std,
-            'chroma_mean': chroma_mean
+            'pitch_mean': float(pitch_mean),
+            'pitch_std': float(pitch_std),
+            'chroma_mean': float(chroma_mean)
         }
     except Exception as e:
         st.error(f"Feature extraction error: {str(e)}")
@@ -968,9 +982,9 @@ def main():
             
             # Audio input
             audio_file = st.file_uploader(
-                "Upload your 5-second voice note",
-                type=['wav', 'mp3', 'ogg', 'm4a'],
-                help="Record or select an audio file (5-10 seconds works best)"
+                "Upload your 5-second voice note (WAV format)",
+                type=['wav'],
+                help="Record a voice note and save as WAV format (most voice recorder apps support this)"
             )
             
             if audio_file:
@@ -979,9 +993,35 @@ def main():
                 if st.button("Create My Lumora", use_container_width=True):
                     with st.spinner("Analyzing your voice and matching your music..."):
                         try:
-                            # Load audio
+                            # Load audio using scipy
                             audio_bytes = audio_file.read()
-                            audio_data, sr = librosa.load(io.BytesIO(audio_bytes), sr=22050, duration=10)
+                            
+                            # Try to load as WAV first
+                            try:
+                                audio_file.seek(0)
+                                sr, audio_data = wavfile.read(io.BytesIO(audio_bytes))
+                                
+                                # Convert to mono if stereo
+                                if len(audio_data.shape) > 1:
+                                    audio_data = np.mean(audio_data, axis=1)
+                                
+                                # Normalize
+                                audio_data = audio_data.astype(float)
+                                if np.max(np.abs(audio_data)) > 0:
+                                    audio_data = audio_data / np.max(np.abs(audio_data))
+                                
+                            except:
+                                st.error("Please upload a WAV file for best results. MP3/M4A require additional conversion.")
+                                st.info("Tip: You can convert your audio to WAV format using online tools or your device's voice recorder app.")
+                                continue
+                            
+                            # Resample if needed (simple decimation)
+                            target_sr = 22050
+                            if sr != target_sr:
+                                factor = sr // target_sr
+                                if factor > 1:
+                                    audio_data = signal.decimate(audio_data, factor)
+                                    sr = target_sr
                             
                             # Limit to 5 seconds
                             max_samples = 5 * sr
