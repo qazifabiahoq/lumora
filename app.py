@@ -14,9 +14,7 @@ from collections import Counter
 import pandas as pd
 from scipy.io import wavfile
 from scipy import signal
-from moviepy.editor import AudioFileClip
-import tempfile
-import os
+import audioread
 
 # Page configuration
 st.set_page_config(
@@ -986,18 +984,19 @@ def main():
             # Audio input
             st.markdown("""
             <div style="background: #e7f5ff; padding: 1rem; border-radius: 8px; border-left: 4px solid #1DB954; margin-bottom: 1rem;">
-                <p style="color: #1e3a5f; margin: 0; font-size: 0.9rem;">
-                <strong>📱 Supported:</strong> All audio formats + video audio extraction<br>
-                <strong>Audio:</strong> WAV, MP3, M4A, OGG, FLAC, AAC, WMA, AIFF<br>
-                <strong>Video audio:</strong> MP4, MOV, AVI, MKV, WEBM (audio will be extracted)
+                <p style="color: #1e3a5f; margin: 0 0 0.5rem 0; font-size: 0.9rem; font-weight: 600;">
+                Supported Formats
+                </p>
+                <p style="color: #1e3a5f; margin: 0; font-size: 0.85rem;">
+                <strong>WAV</strong> (best quality) | <strong>MP3</strong> (most common)
                 </p>
             </div>
             """, unsafe_allow_html=True)
             
             audio_file = st.file_uploader(
-                "Upload your 5-second voice note or video",
-                type=['wav', 'mp3', 'm4a', 'ogg', 'flac', 'aac', 'wma', 'aiff', 'mp4', 'mov', 'avi', 'mkv', 'webm'],
-                help="Upload any audio file or video (we'll extract the audio)"
+                "Upload your 5-second voice note",
+                type=['wav', 'mp3'],
+                help="Upload WAV or MP3 audio file"
             )
             
             if audio_file:
@@ -1010,55 +1009,24 @@ def main():
                             audio_bytes = audio_file.read()
                             file_extension = audio_file.name.split('.')[-1].lower()
                             
-                            # List of supported formats
-                            audio_formats = ['mp3', 'm4a', 'ogg', 'flac', 'aac', 'wma', 'aiff']
-                            video_formats = ['mp4', 'mov', 'avi', 'mkv', 'webm']
-                            
-                            # Process based on file type
-                            if file_extension in audio_formats or file_extension in video_formats:
+                            if file_extension == 'mp3':
+                                # Use audioread for MP3
                                 try:
-                                    # Save to temporary file (moviepy needs file path)
-                                    with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_extension}') as tmp_input:
-                                        tmp_input.write(audio_bytes)
-                                        tmp_input_path = tmp_input.name
-                                    
-                                    if file_extension in video_formats:
-                                        st.info(f"Extracting audio from {file_extension.upper()} video...")
-                                    
-                                    # Load audio with moviepy
-                                    audio_clip = AudioFileClip(tmp_input_path)
-                                    
-                                    # Export as WAV
-                                    with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_wav:
-                                        tmp_wav_path = tmp_wav.name
-                                    
-                                    audio_clip.write_audiofile(
-                                        tmp_wav_path,
-                                        fps=22050,
-                                        nbytes=2,
-                                        codec='pcm_s16le',
-                                        logger=None  # Suppress moviepy output
-                                    )
-                                    audio_clip.close()
-                                    
-                                    # Read WAV
-                                    sr, audio_data = wavfile.read(tmp_wav_path)
-                                    
-                                    # Cleanup temp files
-                                    os.unlink(tmp_input_path)
-                                    os.unlink(tmp_wav_path)
-                                    
-                                    # Convert to mono if stereo
-                                    if len(audio_data.shape) > 1:
-                                        audio_data = np.mean(audio_data, axis=1)
-                                    
-                                    if file_extension in video_formats:
-                                        st.success(f"Audio extracted from video successfully!")
-                                    
+                                    with audioread.audio_open(io.BytesIO(audio_bytes)) as f:
+                                        sr = f.samplerate
+                                        # Read all audio data
+                                        audio_data = []
+                                        for buf in f:
+                                            audio_data.append(np.frombuffer(buf, dtype=np.int16))
+                                        audio_data = np.concatenate(audio_data)
+                                        
+                                        # Convert to mono if stereo
+                                        if f.channels == 2:
+                                            audio_data = audio_data.reshape(-1, 2).mean(axis=1)
+                                        
                                 except Exception as e:
-                                    st.error(f"Could not process {file_extension.upper()} file.")
-                                    st.info(f"Error: {str(e)}")
-                                    st.info("Try converting your file to WAV or MP3 format first.")
+                                    st.error(f"Could not process MP3 file: {str(e)}")
+                                    st.info("Try converting to WAV format using an online converter.")
                                     st.stop()
                             else:
                                 # Load WAV directly
