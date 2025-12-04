@@ -981,10 +981,19 @@ def main():
             """, unsafe_allow_html=True)
             
             # Audio input
+            st.markdown("""
+            <div style="background: #fff3cd; padding: 1rem; border-radius: 8px; border-left: 4px solid #ffc107; margin-bottom: 1rem;">
+                <p style="color: #856404; margin: 0; font-size: 0.9rem;">
+                <strong>Accepted format:</strong> WAV files only<br>
+                <strong>Have MP3?</strong> Convert it free at <a href="https://cloudconvert.com/mp3-to-wav" target="_blank" style="color: #1DB954;">cloudconvert.com</a> (takes 10 seconds)
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
             audio_file = st.file_uploader(
                 "Upload your 5-second voice note (WAV format)",
                 type=['wav'],
-                help="Record a voice note and save as WAV format (most voice recorder apps support this)"
+                help="Most voice recorder apps can save as WAV format"
             )
             
             if audio_file:
@@ -993,31 +1002,23 @@ def main():
                 if st.button("Create My Lumora", use_container_width=True):
                     with st.spinner("Analyzing your voice and matching your music..."):
                         try:
-                            # Load audio using scipy
+                            # Load WAV file
                             audio_bytes = audio_file.read()
+                            audio_file.seek(0)
+                            sr, audio_data = wavfile.read(io.BytesIO(audio_bytes))
                             
-                            # Try to load as WAV first
-                            try:
-                                audio_file.seek(0)
-                                sr, audio_data = wavfile.read(io.BytesIO(audio_bytes))
-                                
-                                # Convert to mono if stereo
-                                if len(audio_data.shape) > 1:
-                                    audio_data = np.mean(audio_data, axis=1)
-                                
-                                # Normalize
-                                audio_data = audio_data.astype(float)
-                                if np.max(np.abs(audio_data)) > 0:
-                                    audio_data = audio_data / np.max(np.abs(audio_data))
-                                
-                            except Exception as e:
-                                st.error("Please upload a WAV file for best results.")
-                                st.info("Tip: You can convert your audio to WAV format using online tools or your phone's voice recorder app.")
-                                st.stop()
+                            # Convert to mono if stereo
+                            if len(audio_data.shape) > 1:
+                                audio_data = np.mean(audio_data, axis=1)
+                            
+                            # Normalize
+                            audio_data = audio_data.astype(float)
+                            if np.max(np.abs(audio_data)) > 0:
+                                audio_data = audio_data / np.max(np.abs(audio_data))
                             
                             # Resample if needed (simple decimation)
                             target_sr = 22050
-                            if sr != target_sr:
+                            if sr > target_sr:
                                 factor = sr // target_sr
                                 if factor > 1:
                                     audio_data = signal.decimate(audio_data, factor)
