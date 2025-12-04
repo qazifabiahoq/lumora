@@ -14,7 +14,9 @@ from collections import Counter
 import pandas as pd
 from scipy.io import wavfile
 from scipy import signal
-from pydub import AudioSegment
+from moviepy.editor import AudioFileClip
+import tempfile
+import os
 
 # Page configuration
 st.set_page_config(
@@ -1015,39 +1017,47 @@ def main():
                             # Process based on file type
                             if file_extension in audio_formats or file_extension in video_formats:
                                 try:
-                                    # Determine format for pydub
-                                    if file_extension == 'm4a':
-                                        format_name = 'mp4'
-                                    elif file_extension in video_formats:
-                                        format_name = file_extension
+                                    # Save to temporary file (moviepy needs file path)
+                                    with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_extension}') as tmp_input:
+                                        tmp_input.write(audio_bytes)
+                                        tmp_input_path = tmp_input.name
+                                    
+                                    if file_extension in video_formats:
                                         st.info(f"Extracting audio from {file_extension.upper()} video...")
-                                    else:
-                                        format_name = file_extension
                                     
-                                    # Load and convert to WAV
-                                    audio_segment = AudioSegment.from_file(
-                                        io.BytesIO(audio_bytes), 
-                                        format=format_name
-                                    )
-                                    
-                                    # Convert to mono and set sample rate
-                                    audio_segment = audio_segment.set_channels(1)
-                                    audio_segment = audio_segment.set_frame_rate(22050)
+                                    # Load audio with moviepy
+                                    audio_clip = AudioFileClip(tmp_input_path)
                                     
                                     # Export as WAV
-                                    wav_io = io.BytesIO()
-                                    audio_segment.export(wav_io, format='wav')
-                                    wav_io.seek(0)
+                                    with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_wav:
+                                        tmp_wav_path = tmp_wav.name
+                                    
+                                    audio_clip.write_audiofile(
+                                        tmp_wav_path,
+                                        fps=22050,
+                                        nbytes=2,
+                                        codec='pcm_s16le',
+                                        logger=None  # Suppress moviepy output
+                                    )
+                                    audio_clip.close()
                                     
                                     # Read WAV
-                                    sr, audio_data = wavfile.read(wav_io)
+                                    sr, audio_data = wavfile.read(tmp_wav_path)
+                                    
+                                    # Cleanup temp files
+                                    os.unlink(tmp_input_path)
+                                    os.unlink(tmp_wav_path)
+                                    
+                                    # Convert to mono if stereo
+                                    if len(audio_data.shape) > 1:
+                                        audio_data = np.mean(audio_data, axis=1)
                                     
                                     if file_extension in video_formats:
                                         st.success(f"Audio extracted from video successfully!")
                                     
                                 except Exception as e:
                                     st.error(f"Could not process {file_extension.upper()} file.")
-                                    st.info(f"Error details: {str(e)}")
+                                    st.info(f"Error: {str(e)}")
                                     st.info("Try converting your file to WAV or MP3 format first.")
                                     st.stop()
                             else:
