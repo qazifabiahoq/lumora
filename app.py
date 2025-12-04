@@ -985,29 +985,38 @@ def main():
             st.markdown("""
             <div style="background: #e7f5ff; padding: 1rem; border-radius: 8px; border-left: 4px solid #1DB954; margin-bottom: 1rem;">
                 <p style="color: #1e3a5f; margin: 0 0 0.5rem 0; font-size: 0.9rem; font-weight: 600;">
-                Supported Formats
+                Two Ways to Add Your Voice
                 </p>
                 <p style="color: #1e3a5f; margin: 0; font-size: 0.85rem;">
-                <strong>WAV</strong> (best quality) | <strong>MP3</strong> (most common)
+                <strong>Option 1:</strong> Record directly below (click microphone)<br>
+                <strong>Option 2:</strong> Upload WAV or MP3 file
                 </p>
             </div>
             """, unsafe_allow_html=True)
             
+            # Direct voice recording
+            st.markdown("**Record directly (recommended):**")
+            audio_recording = st.audio_input("Click to record your voice")
+            
+            st.markdown("**Or upload a file:**")
             audio_file = st.file_uploader(
-                "Upload your 5-second voice note",
+                "Upload WAV or MP3",
                 type=['wav', 'mp3'],
-                help="Upload WAV or MP3 audio file"
+                help="Upload if you already have a recording"
             )
             
-            if audio_file:
-                st.audio(audio_file)
+            # Use whichever is available
+            audio_source = audio_recording if audio_recording else audio_file
+            
+            if audio_source:
+                st.audio(audio_source)
                 
                 if st.button("Create My Lumora", use_container_width=True):
                     with st.spinner("Analyzing your voice and matching your music..."):
                         try:
                             # Load audio file
-                            audio_bytes = audio_file.read()
-                            file_extension = audio_file.name.split('.')[-1].lower()
+                            audio_bytes = audio_source.read()
+                            file_extension = audio_source.name.split('.')[-1].lower() if hasattr(audio_source, 'name') else 'wav'
                             
                             if file_extension == 'mp3':
                                 # Use audioread for MP3
@@ -1029,8 +1038,8 @@ def main():
                                     st.info("Try converting to WAV format using an online converter.")
                                     st.stop()
                             else:
-                                # Load WAV directly
-                                audio_file.seek(0)
+                                # Load WAV directly (from recording or upload)
+                                audio_source.seek(0)
                                 sr, audio_data = wavfile.read(io.BytesIO(audio_bytes))
                                 
                                 # Convert to mono if stereo
