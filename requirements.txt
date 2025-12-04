@@ -3,3 +3,5 @@ numpy
 plotly
 pandas
 scipy
+moviepy
+imageio-ffmpeg
