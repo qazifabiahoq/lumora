@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lumora - Your Voice, Your Vibe, Your Music</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1 class="title">Lumora</h1>
+            <p class="subtitle">Speak your mood, discover music that matches your energy</p>
+        </header>
+
+        <!-- Main Section -->
+        <main class="main-content">
+            <!-- Record Section -->
+            <section class="record-section" id="recordSection">
+                <div class="card">
+                    <h2>Record Your Voice</h2>
+                    <p class="instructions">Just speak naturally for 5-10 seconds. Say anything - how you're feeling, what's on your mind, or describe your day.</p>
+                    
+                    <div class="record-controls">
+                        <button id="recordBtn" class="btn-primary">
+                            Start Recording
+                        </button>
+                        <div id="recordingStatus" class="recording-status hidden">
+                            <span class="pulse"></span>
+                            Recording... <span id="timer">0s</span>
+                        </div>
+                    </div>
+
+                    <div id="audioPreview" class="audio-preview hidden">
+                        <audio id="audioPlayer" controls></audio>
+                        <button id="analyzeBtn" class="btn-secondary">
+                            Analyze My Mood
+                        </button>
+                    </div>
+
+                    <div id="uploadSection" class="upload-section">
+                        <p class="or-text">OR</p>
+                        <label for="fileInput" class="file-label">
+                            Upload Audio File (WAV/MP3)
+                        </label>
+                        <input type="file" id="fileInput" accept="audio/*" hidden>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Loading Section -->
+            <section id="loadingSection" class="loading-section hidden">
+                <div class="loader"></div>
+                <p>Analyzing your voice...</p>
+            </section>
+
+            <!-- Results Section -->
+            <section id="resultsSection" class="results-section hidden">
+                <div class="card">
+                    <h2>Your Mood</h2>
+                    <div id="emotionBadge" class="emotion-badge"></div>
+                    
+                    <div class="metrics">
+                        <div class="metric-card">
+                            <div class="metric-value" id="valenceValue">--</div>
+                            <div class="metric-label">Positivity</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="arousalValue">--</div>
+                            <div class="metric-label">Energy</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value" id="intensityValue">--</div>
+                            <div class="metric-label">Intensity</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Your Perfect Playlist</h2>
+                    <div id="playlist" class="playlist"></div>
+                </div>
+
+                <button id="tryAgainBtn" class="btn-primary">
+                    Try Again
+                </button>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Lumora - Your Voice, Your Vibe, Your Music</p>
+            <p class="small">Privacy: All processing happens on the server. No data is stored permanently.</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
