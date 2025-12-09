@@ -9,7 +9,6 @@ import numpy as np
 from scipy.io import wavfile
 from scipy import signal
 import io
-import base64
 from datetime import datetime
 import os
 
@@ -17,139 +16,12 @@ app = Flask(__name__)
 CORS(app)
 
 # ============================================================================
-# Deep Learning Model Architecture (Simulated LSTM)
-# ============================================================================
-
-class EmotionLSTM:
-    """
-    Simulated LSTM-based emotion recognition model
-    In production, this would be a trained TensorFlow/PyTorch model
-    
-    Architecture:
-    - Input: Sequential audio features (timesteps × features)
-    - LSTM Layer 1: 128 units with tanh activation
-    - Dropout: 0.3 for regularization
-    - LSTM Layer 2: 64 units with tanh activation
-    - Dense Layer: 32 units with ReLU
-    - Output Layer: 3 neurons (valence, arousal, intensity) with sigmoid
-    """
-    
-    def __init__(self):
-        # Simulated pre-trained weights (in production: load from .h5 or .pt file)
-        self.lstm1_weights = self._initialize_weights(128)
-        self.lstm2_weights = self._initialize_weights(64)
-        self.dense_weights = self._initialize_weights(32)
-        self.output_weights = np.random.randn(32, 3) * 0.1
-        
-    def _initialize_weights(self, units):
-        """Initialize LSTM gate weights"""
-        return {
-            'W_f': np.random.randn(units, units) * 0.1,  # Forget gate
-            'W_i': np.random.randn(units, units) * 0.1,  # Input gate
-            'W_c': np.random.randn(units, units) * 0.1,  # Cell state
-            'W_o': np.random.randn(units, units) * 0.1,  # Output gate
-        }
-    
-    def lstm_cell(self, x, h_prev, c_prev, weights, units):
-        """
-        LSTM cell forward pass
-        Implements: forget gate, input gate, cell state update, output gate
-        """
-        # Ensure proper dimensions
-        if len(x.shape) == 1:
-            x = x[:units] if len(x) >= units else np.pad(x, (0, units - len(x)))
-        
-        # Forget gate: decides what to forget from previous cell state
-        f_t = self._sigmoid(x * 0.1 + h_prev * 0.1)
-        
-        # Input gate: decides what new information to add
-        i_t = self._sigmoid(x * 0.1 + h_prev * 0.1)
-        
-        # Candidate cell state
-        c_tilde = np.tanh(x * 0.1 + h_prev * 0.1)
-        
-        # New cell state
-        c_t = f_t * c_prev + i_t * c_tilde
-        
-        # Output gate: decides what to output
-        o_t = self._sigmoid(x * 0.1 + h_prev * 0.1)
-        h_t = o_t * np.tanh(c_t)
-        
-        return h_t, c_t
-    
-    def _sigmoid(self, x):
-        """Sigmoid activation function"""
-        return 1 / (1 + np.exp(-np.clip(x, -500, 500)))
-    
-    def _relu(self, x):
-        """ReLU activation function"""
-        return np.maximum(0, x)
-    
-    def predict(self, sequence_features):
-        """
-        Forward pass through LSTM network
-        
-        Args:
-            sequence_features: (timesteps, features) array
-        
-        Returns:
-            (valence, arousal, intensity) predictions
-        """
-        try:
-            # Initialize states with proper dimensions
-            h1 = np.zeros(min(128, len(sequence_features[0]) * 20))
-            c1 = np.zeros(min(128, len(sequence_features[0]) * 20))
-            h2 = np.zeros(min(64, len(sequence_features[0]) * 10))
-            c2 = np.zeros(min(64, len(sequence_features[0]) * 10))
-            
-            # Process sequence
-            for t in range(len(sequence_features)):
-                x_t = sequence_features[t]
-                
-                # Ensure x_t is proper size
-                if len(x_t) < len(h1):
-                    x_t = np.pad(x_t, (0, len(h1) - len(x_t)))
-                else:
-                    x_t = x_t[:len(h1)]
-                
-                # Simple LSTM computation
-                h1 = self._sigmoid(x_t * 0.5 + h1 * 0.3)
-                c1 = np.tanh(x_t * 0.4 + c1 * 0.6)
-                
-                h2_input = h1[:len(h2)]
-                h2 = self._sigmoid(h2_input * 0.5 + h2 * 0.3)
-                c2 = np.tanh(h2_input * 0.4 + c2 * 0.6)
-            
-            # Final predictions with dropout simulation
-            h2_small = h2[:32] if len(h2) >= 32 else np.pad(h2, (0, 32 - len(h2)))
-            
-            # Output layer
-            valence = self._sigmoid(np.mean(h2_small) * 2)
-            arousal = self._sigmoid(np.std(h2_small) * 5)
-            intensity = self._sigmoid(np.max(h2_small) * 1.5)
-            
-            return valence, arousal, intensity
-            
-        except Exception as e:
-            print(f"LSTM prediction error: {e}")
-            # Fallback to simple computation
-            mean_features = np.mean(sequence_features, axis=0)
-            return float(np.clip(mean_features[0] * 2, 0, 1)), \
-                   float(np.clip(mean_features[1] * 2, 0, 1)), \
-                   float(np.clip(mean_features[2] * 2, 0, 1))
-
-
-# Initialize deep learning model
-emotion_model = EmotionLSTM()
-
-# ============================================================================
-# Advanced Feature Extraction with Temporal Modeling
+# Audio Feature Extraction
 # ============================================================================
 
 def extract_audio_features(audio_data, sr=22050):
     """
     Extract acoustic features from audio signal
-    Enhanced with temporal windowing for LSTM input
     """
     try:
         audio_data = audio_data.astype(float)
@@ -158,120 +30,92 @@ def extract_audio_features(audio_data, sr=22050):
         if np.max(np.abs(audio_data)) > 0:
             audio_data = audio_data / np.max(np.abs(audio_data))
         
-        # Window parameters for temporal feature extraction
-        window_size = sr // 10  # 100ms windows
-        hop_size = sr // 20      # 50ms hop (50% overlap)
-        n_windows = (len(audio_data) - window_size) // hop_size + 1
+        # Energy analysis
+        energy = np.sqrt(np.mean(audio_data**2))
+        energy_variance = np.std(audio_data**2)
         
-        # Extract features for each time window (for LSTM sequence)
-        temporal_features = []
+        # Zero Crossing Rate
+        zero_crossings = np.sum(np.abs(np.diff(np.sign(audio_data)))) / (2 * len(audio_data))
         
-        for i in range(n_windows):
-            start = i * hop_size
-            end = start + window_size
-            window = audio_data[start:end]
-            
-            if len(window) < window_size:
-                break
-            
-            # Energy features
-            energy = np.sqrt(np.mean(window**2))
-            energy_variance = np.std(window**2)
-            
-            # Zero Crossing Rate
-            zcr = np.sum(np.abs(np.diff(np.sign(window)))) / (2 * len(window))
-            
-            # Spectral features
-            fft = np.fft.rfft(window)
-            magnitude = np.abs(fft)
-            frequency = np.fft.rfftfreq(len(window), 1/sr)
-            
-            spectral_centroid = np.sum(frequency * magnitude) / np.sum(magnitude) if np.sum(magnitude) > 0 else 0
-            
-            cumsum = np.cumsum(magnitude)
-            rolloff_idx = np.where(cumsum >= 0.85 * cumsum[-1])[0]
-            spectral_rolloff = frequency[rolloff_idx[0]] if len(rolloff_idx) > 0 else 0
-            
-            # Pitch estimation for this window
-            autocorr = np.correlate(window, window, mode='full')
-            autocorr = autocorr[len(autocorr)//2:]
-            peaks = signal.find_peaks(autocorr)[0]
-            pitch = sr / peaks[0] if len(peaks) > 0 and peaks[0] > 0 else 200
-            
-            # Create feature vector for this timestep
-            window_features = np.array([
-                energy,
-                energy_variance,
-                zcr,
-                spectral_centroid / 1000,  # Normalize
-                spectral_rolloff / 1000,    # Normalize
-                pitch / 500,                # Normalize
-            ])
-            
-            temporal_features.append(window_features)
+        # Spectral features using FFT
+        fft = np.fft.rfft(audio_data)
+        magnitude = np.abs(fft)
+        frequency = np.fft.rfftfreq(len(audio_data), 1/sr)
         
-        # Convert to numpy array for LSTM input
-        temporal_features = np.array(temporal_features)
+        # Spectral Centroid
+        spectral_centroid = np.sum(frequency * magnitude) / np.sum(magnitude) if np.sum(magnitude) > 0 else 0
         
-        # Also compute global statistics for fallback
-        global_features = {
-            'energy': float(np.mean([f[0] for f in temporal_features])),
-            'energy_variance': float(np.mean([f[1] for f in temporal_features])),
-            'zcr': float(np.mean([f[2] for f in temporal_features])),
-            'spectral_centroid': float(np.mean([f[3] for f in temporal_features]) * 1000),
-            'spectral_rolloff': float(np.mean([f[4] for f in temporal_features]) * 1000),
-            'pitch_mean': float(np.mean([f[5] for f in temporal_features]) * 500),
-            'pitch_std': float(np.std([f[5] for f in temporal_features]) * 500),
-            'temporal_sequence': temporal_features
+        # Spectral Rolloff
+        cumsum = np.cumsum(magnitude)
+        rolloff_idx = np.where(cumsum >= 0.85 * cumsum[-1])[0]
+        spectral_rolloff = frequency[rolloff_idx[0]] if len(rolloff_idx) > 0 else 0
+        
+        # Tempo estimation
+        autocorr = np.correlate(audio_data, audio_data, mode='full')
+        autocorr = autocorr[len(autocorr)//2:]
+        peaks = signal.find_peaks(autocorr, distance=sr//10)[0]
+        
+        if len(peaks) > 1:
+            tempo = 60 * sr / np.median(np.diff(peaks[:5]))
+        else:
+            tempo = 120
+        
+        # Pitch estimation
+        pitch_values = []
+        for i in range(0, len(audio_data) - sr//10, sr//20):
+            segment = audio_data[i:i + sr//10]
+            autocorr_seg = np.correlate(segment, segment, mode='full')
+            autocorr_seg = autocorr_seg[len(autocorr_seg)//2:]
+            peaks_seg = signal.find_peaks(autocorr_seg)[0]
+            if len(peaks_seg) > 0:
+                pitch_values.append(sr / peaks_seg[0] if peaks_seg[0] > 0 else 0)
+        
+        pitch_mean = np.mean(pitch_values) if pitch_values else 200
+        pitch_std = np.std(pitch_values) if pitch_values else 0
+        
+        # Chroma
+        chroma_mean = np.mean(magnitude[:int(len(magnitude)//2)])
+        
+        return {
+            'energy': float(energy),
+            'energy_variance': float(energy_variance),
+            'tempo': float(np.clip(tempo, 60, 200)),
+            'zcr': float(zero_crossings),
+            'spectral_centroid': float(spectral_centroid),
+            'spectral_rolloff': float(spectral_rolloff),
+            'pitch_mean': float(pitch_mean),
+            'pitch_std': float(pitch_std),
+            'chroma_mean': float(chroma_mean)
         }
-        
-        return global_features
-        
     except Exception as e:
         print(f"Feature extraction error: {str(e)}")
         return None
 
 
-def classify_emotion_deep_learning(features):
+def classify_emotion(features):
     """
-    LSTM-based emotion classification
-    Uses temporal sequence features for improved accuracy
+    Classify emotion from voice features
     """
-    if not features or 'temporal_sequence' not in features:
+    if not features:
         return None
     
     try:
-        # Get temporal sequence for LSTM
-        sequence = features['temporal_sequence']
+        energy = features['energy']
+        tempo = features['tempo']
+        spectral_centroid = features['spectral_centroid']
+        pitch_std = features['pitch_std']
         
-        # Pad or truncate to fixed length (20 timesteps)
-        max_timesteps = 20
-        if len(sequence) < max_timesteps:
-            # Pad with zeros
-            padding = np.zeros((max_timesteps - len(sequence), sequence.shape[1]))
-            sequence = np.vstack([sequence, padding])
-        else:
-            # Truncate
-            sequence = sequence[:max_timesteps]
+        # Calculate emotional dimensions
+        valence_score = (spectral_centroid / 3000) * 0.6 + (features['chroma_mean'] * 2) * 0.4
+        valence = np.clip(valence_score, 0, 1)
         
-        # Run through LSTM model
-        valence, arousal, intensity = emotion_model.predict(sequence)
+        arousal_score = (energy * 10) * 0.5 + (tempo / 200) * 0.5
+        arousal = np.clip(arousal_score, 0, 1)
         
-        # Apply additional signal processing for refinement
-        # Incorporate global features for robustness
-        spectral_factor = features['spectral_centroid'] / 3000
-        energy_factor = features['energy'] * 10
+        intensity_score = (features['energy_variance'] * 20) * 0.5 + (pitch_std / 100) * 0.5
+        intensity = np.clip(intensity_score, 0, 1)
         
-        # Refine predictions with traditional features
-        valence = 0.7 * valence + 0.3 * spectral_factor
-        arousal = 0.7 * arousal + 0.3 * energy_factor
-        
-        # Clip to valid range
-        valence = np.clip(valence, 0, 1)
-        arousal = np.clip(arousal, 0, 1)
-        intensity = np.clip(intensity, 0, 1)
-        
-        # Classify into emotion categories
+        # Classify emotion
         if valence > 0.6 and arousal > 0.6:
             emotion = "Energized Joy"
             color = "#FFD700"
@@ -296,72 +140,16 @@ def classify_emotion_deep_learning(features):
             'color': color,
             'valence': float(valence),
             'arousal': float(arousal),
-            'intensity': float(intensity),
-            'model': 'LSTM',
-            'raw_features': features
+            'intensity': float(intensity)
         }
-        
     except Exception as e:
-        print(f"Deep learning classification error: {str(e)}")
+        print(f"Classification error: {str(e)}")
         return None
-
-
-def classify_emotion(features):
-    """
-    Fallback emotion classification (rule-based)
-    Used when deep learning model fails
-    """
-    if not features:
-        return None
-    
-    energy = features['energy']
-    spectral_centroid = features['spectral_centroid']
-    pitch_std = features.get('pitch_std', 0)
-    
-    # Calculate mood dimensions
-    valence_score = (spectral_centroid / 3000) * 0.6 + (energy * 2) * 0.4
-    valence = np.clip(valence_score, 0, 1)
-    
-    arousal_score = (energy * 10) * 0.5 + 0.5
-    arousal = np.clip(arousal_score, 0, 1)
-    
-    intensity_score = (features['energy_variance'] * 20) * 0.5 + (pitch_std / 100) * 0.5
-    intensity = np.clip(intensity_score, 0, 1)
-    
-    # Determine mood
-    if valence > 0.6 and arousal > 0.6:
-        emotion = "Energized Joy"
-        color = "#FFD700"
-    elif valence > 0.6 and arousal < 0.4:
-        emotion = "Peaceful Calm"
-        color = "#87CEEB"
-    elif valence < 0.4 and arousal > 0.6:
-        emotion = "Intense Tension"
-        color = "#FF4500"
-    elif valence < 0.4 and arousal < 0.4:
-        emotion = "Melancholic Reflection"
-        color = "#4B0082"
-    elif intensity > 0.7:
-        emotion = "Passionate Expression"
-        color = "#FF1493"
-    else:
-        emotion = "Balanced Contemplation"
-        color = "#1DB954"
-    
-    return {
-        'emotion': emotion,
-        'color': color,
-        'valence': float(valence),
-        'arousal': float(arousal),
-        'intensity': float(intensity),
-        'model': 'Rule-based',
-        'raw_features': features
-    }
 
 
 def generate_playlist(emotion_data):
     """
-    Creates your personalized playlist
+    Generate personalized playlist
     """
     emotion = emotion_data['emotion']
     valence = emotion_data['valence']
@@ -464,23 +252,30 @@ def analyze_voice():
     Analyze voice recording and return emotion + playlist
     """
     try:
+        print("Received analyze request")
+        
         if 'audio' not in request.files:
+            print("No audio file in request")
             return jsonify({'error': 'No audio file provided'}), 400
         
         audio_file = request.files['audio']
+        print(f"Audio file received: {audio_file.filename}")
         
         # Read audio data
         audio_bytes = audio_file.read()
+        print(f"Audio bytes read: {len(audio_bytes)}")
         
         try:
             sr, audio_data = wavfile.read(io.BytesIO(audio_bytes))
+            print(f"Sample rate: {sr}, Audio length: {len(audio_data)}")
         except Exception as e:
-            print(f"Error reading audio file: {e}")
-            return jsonify({'error': 'Could not read audio file. Please use WAV format.'}), 400
+            print(f"Error reading WAV: {e}")
+            return jsonify({'error': 'Could not read audio file'}), 400
         
         # Convert to mono if stereo
         if len(audio_data.shape) > 1:
             audio_data = np.mean(audio_data, axis=1)
+            print("Converted to mono")
         
         # Normalize
         audio_data = audio_data.astype(float)
@@ -494,46 +289,35 @@ def analyze_voice():
             if factor > 1:
                 audio_data = signal.decimate(audio_data, factor)
                 sr = target_sr
+                print(f"Resampled to {sr}")
         
         # Limit to 10 seconds
         max_samples = 10 * sr
         if len(audio_data) > max_samples:
             audio_data = audio_data[:max_samples]
         
-        # Extract features (with temporal sequences for LSTM)
-        try:
-            features = extract_audio_features(audio_data, sr)
-        except Exception as e:
-            print(f"Feature extraction error: {e}")
-            return jsonify({'error': 'Could not extract audio features'}), 400
+        print("Extracting features...")
+        features = extract_audio_features(audio_data, sr)
         
         if not features:
+            print("Feature extraction failed")
             return jsonify({'error': 'Could not extract audio features'}), 400
         
-        # Classify emotion using LSTM deep learning model
-        try:
-            emotion_data = classify_emotion_deep_learning(features)
-        except Exception as e:
-            print(f"Deep learning classification error: {e}")
-            emotion_data = None
+        print(f"Features extracted: {list(features.keys())}")
         
-        # Fallback to rule-based if deep learning fails
-        if not emotion_data:
-            try:
-                emotion_data = classify_emotion(features)
-            except Exception as e:
-                print(f"Rule-based classification error: {e}")
-                return jsonify({'error': 'Could not classify emotion'}), 400
+        print("Classifying emotion...")
+        emotion_data = classify_emotion(features)
         
         if not emotion_data:
+            print("Emotion classification failed")
             return jsonify({'error': 'Could not classify emotion'}), 400
         
-        # Generate playlist
-        try:
-            playlist = generate_playlist(emotion_data)
-        except Exception as e:
-            print(f"Playlist generation error: {e}")
-            return jsonify({'error': 'Could not generate playlist'}), 400
+        print(f"Emotion detected: {emotion_data['emotion']}")
+        
+        print("Generating playlist...")
+        playlist = generate_playlist(emotion_data)
+        
+        print(f"Playlist generated with {len(playlist)} tracks")
         
         # Return results
         return jsonify({
@@ -543,13 +327,12 @@ def analyze_voice():
             'valence': emotion_data['valence'],
             'arousal': emotion_data['arousal'],
             'intensity': emotion_data['intensity'],
-            'model_used': emotion_data.get('model', 'LSTM'),
             'playlist': playlist,
             'timestamp': datetime.now().isoformat()
         })
     
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"ERROR in analyze_voice: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Processing error: {str(e)}'}), 500
@@ -558,9 +341,10 @@ def analyze_voice():
 @app.route('/health')
 def health():
     """Health check for deployment"""
-    return jsonify({'status': 'healthy', 'service': 'lumora', 'model': 'LSTM'})
+    return jsonify({'status': 'healthy', 'service': 'lumora'})
 
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
+    print(f"Starting Lumora on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
