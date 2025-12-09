@@ -1,9 +1,0 @@
-streamlit
-numpy
-plotly
-pandas
-scipy
-audioread
-transformers
-torch
-torchaudio
