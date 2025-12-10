@@ -43,10 +43,6 @@ async function startRecording() {
         audioChunks = [];
         secondsRecorded = 0;
 
-        mediaRecorder.ondataavailable = (event) => {
-            audioChunks.push(event.data);
-        };
-
         mediaRecorder.onstop = () => {
             audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
             const audioUrl = URL.createObjectURL(audioBlob);
@@ -55,6 +51,20 @@ async function startRecording() {
             
             // Stop all tracks
             stream.getTracks().forEach(track => track.stop());
+        };
+
+        // Request WAV format if supported, otherwise use default
+        let options = { mimeType: 'audio/webm' };
+        if (MediaRecorder.isTypeSupported('audio/wav')) {
+            options = { mimeType: 'audio/wav' };
+        }
+        
+        mediaRecorder = new MediaRecorder(stream, options);
+        audioChunks = [];
+        secondsRecorded = 0;
+
+        mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
         };
 
         mediaRecorder.start();
