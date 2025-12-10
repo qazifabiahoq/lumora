@@ -265,12 +265,25 @@ def analyze_voice():
         audio_bytes = audio_file.read()
         print(f"Audio bytes read: {len(audio_bytes)}")
         
+        # Check file format
+        file_header = audio_bytes[:4]
+        print(f"File header: {file_header}")
+        
         try:
+            # Try reading as WAV first
             sr, audio_data = wavfile.read(io.BytesIO(audio_bytes))
-            print(f"Sample rate: {sr}, Audio length: {len(audio_data)}")
-        except Exception as e:
-            print(f"Error reading WAV: {e}")
-            return jsonify({'error': 'Could not read audio file'}), 400
+            print(f"Successfully read as WAV: Sample rate: {sr}, Audio length: {len(audio_data)}")
+        except Exception as wav_error:
+            print(f"Not a WAV file: {wav_error}")
+            # If not WAV, try to read as raw audio or convert
+            try:
+                # Try reading as raw 16-bit PCM at 48kHz (common browser default)
+                audio_data = np.frombuffer(audio_bytes, dtype=np.int16)
+                sr = 48000  # Common browser recording rate
+                print(f"Read as raw PCM: Sample rate: {sr}, Audio length: {len(audio_data)}")
+            except Exception as e:
+                print(f"Could not read audio format: {e}")
+                return jsonify({'error': 'Audio format not supported. Please use WAV file upload instead of recording.'}), 400
         
         # Convert to mono if stereo
         if len(audio_data.shape) > 1:
